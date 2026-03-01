@@ -4,12 +4,11 @@ import { useMembers, useCreateMember, useDeleteMember, useLeave, useCreateLeave,
 import { useCapacityByTeam } from '../hooks/useCapacity'
 import { useSprints } from '../hooks/useSprints'
 import PageHeader from '../components/Layout/PageHeader'
-import TabBar from '../components/shared/TabBar'
 import Badge from '../components/shared/Badge'
 import Modal from '../components/shared/Modal'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
 import { useToast } from '../components/shared/Toast'
-import { MemberRole, LeaveType, TeamMember, Team, TeamType } from '../../../shared/types'
+import { MemberRole, LeaveType, TeamMember } from '../../../shared/types'
 import { format, eachDayOfInterval, isWeekend } from 'date-fns'
 
 const ROLES: MemberRole[] = ['DEV', 'TEST', 'ANALYST', 'PO']
@@ -228,76 +227,70 @@ export default function TeamsPage() {
   const updateTeam = useUpdateTeam()
   const { showToast } = useToast()
   const [activeTeam, setActiveTeam] = useState('')
-  const [editModal, setEditModal] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', type: 'JAVA_ANGULAR' as TeamType })
+  const [editingTabId, setEditingTabId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
 
-  const tabs = teams?.map((t) => ({ id: t.id, label: t.name })) ?? []
   const teamId = activeTeam || teams?.[0]?.id || ''
-  const currentTeam = teams?.find((t) => t.id === teamId)
 
-  const handleOpenEdit = () => {
-    if (!currentTeam) return
-    setEditForm({ name: currentTeam.name, type: currentTeam.type })
-    setEditModal(true)
+  const handleStartEdit = (id: string, currentName: string) => {
+    setEditingTabId(id)
+    setEditingName(currentName)
   }
 
-  const handleSaveTeam = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSaveName = async () => {
+    if (!editingTabId || !editingName.trim()) {
+      setEditingTabId(null)
+      return
+    }
     try {
-      await updateTeam.mutateAsync({ id: teamId, name: editForm.name, type: editForm.type })
-      showToast('Team bijgewerkt')
-      setEditModal(false)
+      await updateTeam.mutateAsync({ id: editingTabId, name: editingName.trim() })
+      showToast('Teamnaam bijgewerkt')
     } catch { showToast('Opslaan mislukt', 'error') }
+    setEditingTabId(null)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSaveName()
+    if (e.key === 'Escape') setEditingTabId(null)
   }
 
   return (
     <div>
       <PageHeader
         title="Teamconfiguratie"
-        subtitle="Leden, verlof en capaciteitsberekening per team"
-        actions={
-          <button
-            onClick={handleOpenEdit}
-            disabled={!teamId}
-            className="text-xs px-3 py-1.5 bg-accent hover:bg-accent-light text-white rounded-lg transition-colors disabled:opacity-30"
-          >
-            ✎ Team bewerken
-          </button>
-        }
+        subtitle="Leden, verlof en capaciteitsberekening per team — dubbelklik op een tab om de naam te wijzigen"
       />
-      {teams && <TabBar tabs={tabs} activeTab={teamId} onChange={setActiveTeam} />}
-      {teamId && <TeamContent teamId={teamId} />}
-
-      {editModal && (
-        <Modal title="Team bewerken" onClose={() => setEditModal(false)} size="sm">
-          <form onSubmit={handleSaveTeam} className="space-y-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Naam</label>
-              <input
-                className="input w-full"
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                required
-              />
+      {teams && (
+        <div className="flex border-b border-border">
+          {teams.map((team) => (
+            <div key={team.id} className="relative">
+              {editingTabId === team.id ? (
+                <input
+                  autoFocus
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={handleSaveName}
+                  onKeyDown={handleKeyDown}
+                  className="px-4 py-2.5 text-sm font-medium bg-transparent border-b-2 border-accent text-accent outline-none w-36"
+                />
+              ) : (
+                <button
+                  onClick={() => setActiveTeam(team.id)}
+                  onDoubleClick={() => handleStartEdit(team.id, team.name)}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    teamId === team.id
+                      ? 'border-accent text-accent'
+                      : 'border-transparent text-gray-400 hover:text-white hover:border-border'
+                  }`}
+                >
+                  {team.name}
+                </button>
+              )}
             </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Type</label>
-              <select
-                className="input w-full"
-                value={editForm.type}
-                onChange={(e) => setEditForm({ ...editForm, type: e.target.value as TeamType })}
-              >
-                <option value="JAVA_ANGULAR">Java / Angular</option>
-                <option value="ORACLE_APEX">Oracle APEX</option>
-              </select>
-            </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={() => setEditModal(false)} className="px-3 py-1.5 text-sm border border-border rounded-lg text-gray-300 hover:bg-surface-2">Annuleren</button>
-              <button type="submit" disabled={updateTeam.isPending} className="px-3 py-1.5 text-sm bg-accent hover:bg-accent-light text-white rounded-lg disabled:opacity-50">Opslaan</button>
-            </div>
-          </form>
-        </Modal>
+          ))}
+        </div>
       )}
+      {teamId && <TeamContent teamId={teamId} />}
     </div>
   )
 }
