@@ -41,9 +41,9 @@ app.use('/api/planning',  planningRoutes)
 app.use('/api/scenarios', scenariosRoutes)
 
 // Serve React build in production
+// Compiled to dist/server/index.js → go up to project root → client/dist
 if (process.env.NODE_ENV === 'production') {
-  // When compiled: dist/server/index.js → ../../client/dist
-  const clientDist = path.resolve(__dirname, '../../client/dist')
+  const clientDist = path.join(__dirname, '..', '..', 'client', 'dist')
   app.use(express.static(clientDist))
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'))
