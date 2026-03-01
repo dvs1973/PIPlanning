@@ -229,8 +229,15 @@ function TeamContent({ teamId }: { teamId: string }) {
                     ({team?.scrum_events_days ?? 1.5}d/pers)
                   </span>
                 </th>
-                <th className="text-center px-3 py-2.5 text-gray-400">
-                  Overhead
+                <th className="text-center px-3 py-2.5 text-gray-400 relative group">
+                  <span className="inline-flex items-center gap-1">
+                    Overhead
+                    <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-gray-500 text-[9px] text-gray-500 cursor-help leading-none">i</span>
+                  </span>
+                  <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-surface-2 border border-border rounded-lg shadow-xl text-left text-[11px] text-gray-300 font-normal hidden group-hover:block">
+                    Tijd besteed aan niet-project-gebonden werk: vergaderingen, administratie, support, code reviews, kennisdeling en ad-hoc taken.
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-surface-2 border-r border-b border-border rotate-45 -mt-1" />
+                  </div>
                   <span className="block text-[10px] text-gray-500 font-normal">({team?.overhead_percentage ?? 15}%)</span>
                 </th>
                 <th className="text-center px-3 py-2.5 text-gray-400">
