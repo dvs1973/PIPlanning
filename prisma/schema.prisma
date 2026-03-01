@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth & Users ───
+
+model User {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  password_hash String
+  name          String
+  role          UserRole   @default(VIEWER)
+  team_id       String?
+  team          Team?      @relation(fields: [team_id], references: [id], onDelete: SetNull)
+  scenarios     Scenario[]
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  TEAM_LEAD
+  VIEWER
+}
+
+// ─── Teams ───
+
+model Team {
+  id                     String       @id @default(uuid())
+  name                   String       @unique
+  type                   TeamType
+  dev_percentage         Float        @default(0.50)
+  test_percentage        Float        @default(0.25)
+  analysis_percentage    Float        @default(0.15)
+  po_percentage          Float        @default(0.10)
+  overhead_percentage    Float        @default(15)
+  bug_reserve_percentage Float        @default(20)
+  sprint_days            Int          @default(10)
+  created_at             DateTime     @default(now())
+  updated_at             DateTime     @updatedAt
+
+  members  TeamMember[]
+  projects Project[]
+  users    User[]
+
+  @@map("teams")
+}
+
+enum TeamType {
+  JAVA_ANGULAR
+  ORACLE_APEX
+}
+
+// ─── Team Members ───
+
+model TeamMember {
+  id         String     @id @default(uuid())
+  team_id    String
+  team       Team       @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  name       String
+  role       MemberRole
+  initials   String     @db.VarChar(4)
+  active     Boolean    @default(true)
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  leave_entries LeaveEntry[]
+
+  @@map("team_members")
+}
+
+enum MemberRole {
+  DEV
+  TEST
+  ANALYST
+  PO
+}
+
+// ─── Sprints ───
+
+model Sprint {
+  id         String   @id @default(uuid())
+  name       String
+  number     Int      @unique
+  start_date DateTime @db.Date
+  end_date   DateTime @db.Date
+  created_at DateTime @default(now())
+
+  leave_entries       LeaveEntry[]
+  project_assignments ProjectAssignment[]
+  projects_starting   Project[]           @relation("ProjectStartSprint")
+
+  @@map("sprints")
+}
+
+// ─── Leave / Afwezigheid ───
+
+model LeaveEntry {
+  id         String     @id @default(uuid())
+  member_id  String
+  member     TeamMember @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  sprint_id  String
+  sprint     Sprint     @relation(fields: [sprint_id], references: [id], onDelete: Cascade)
+  date       DateTime   @db.Date
+  type       LeaveType
+  created_at DateTime   @default(now())
+
+  @@unique([member_id, date])
+  @@index([member_id, sprint_id])
+  @@map("leave_entries")
+}
+
+enum LeaveType {
+  VERLOF
+  OPLEIDING
+  ZIEKTE
+}
+
+// ─── Projects ───
+
+model Project {
+  id               String        @id @default(uuid())
+  pid              String        @unique
+  name             String
+  priority         Priority      @default(B)
+  status           ProjectStatus @default(PLANNED)
+  total_mandays    Float
+  it_mandays       Float
+  business_mandays Float
+  assigned_team_id String?
+  assigned_team    Team?         @relation(fields: [assigned_team_id], references: [id], onDelete: SetNull)
+  capacity_split   Float         @default(1.0)
+  start_sprint_id  String?
+  start_sprint     Sprint?       @relation("ProjectStartSprint", fields: [start_sprint_id], references: [id], onDelete: SetNull)
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+
+  assignments ProjectAssignment[]
+
+  @@map("projects")
+}
+
+enum Priority {
+  A
+  B
+  C
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PLANNED
+  DONE
+}
+
+// ─── Project Sprint Assignments ───
+
+model ProjectAssignment {
+  id         String   @id @default(uuid())
+  project_id String
+  project    Project  @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  sprint_id  String
+  sprint     Sprint   @relation(fields: [sprint_id], references: [id], onDelete: Cascade)
+  split      Float    @default(1.0)
+  created_at DateTime @default(now())
+
+  @@unique([project_id, sprint_id])
+  @@map("project_assignments")
+}
+
+// ─── What-if Scenarios ───
+
+model Scenario {
+  id         String   @id @default(uuid())
+  name       String
+  created_by String
+  creator    User     @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  created_at DateTime @default(now())
+
+  changes ScenarioChange[]
+
+  @@map("scenarios")
+}
+
+model ScenarioChange {
+  id          String     @id @default(uuid())
+  scenario_id String
+  scenario    Scenario   @relation(fields: [scenario_id], references: [id], onDelete: Cascade)
+  change_type ChangeType
+  project_id  String?
+  member_id   String?
+  parameters  Json       @default("{}")
+
+  @@map("scenario_changes")
+}
+
+enum ChangeType {
+  PRIORITY_CHANGE
+  MEMBER_ABSENCE
+  PROJECT_DELAY
+  CAPACITY_SPLIT
+}
