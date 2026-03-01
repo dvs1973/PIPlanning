@@ -43,11 +43,12 @@ export default function SprintPlanningPage() {
         <div className="mt-4">
           {/* Bottleneck banner */}
           {data.bottlenecks.length > 0 && (
-            <div className="bg-cap-red/10 border border-cap-red/30 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
-              <span className="text-cap-red">⚠</span>
-              <span className="text-sm text-cap-red">
-                Overbelasting gedetecteerd: {data.bottlenecks.map((b) => `${ROLE_LABELS[b.role]} (Sprint ${b.sprint_id.slice(0, 6)}…)`).join(', ')}
-              </span>
+            <div className="bg-cap-red/10 border border-cap-red/30 rounded-lg px-4 py-3 mb-4 flex items-start gap-2">
+              <span className="text-cap-red mt-0.5">⚠</span>
+              <div className="text-sm text-cap-red">
+                <span className="font-medium">Overbelasting gedetecteerd — </span>
+                {[...new Set(data.bottlenecks.map((b) => b.role))].map((role) => ROLE_LABELS[role]).join(', ')} zijn overbelast in {data.sprints.filter((s) => data.bottlenecks.some((b) => b.sprint_id === s.id)).map((s) => s.name).join(', ')}.
+              </div>
             </div>
           )}
 
@@ -88,12 +89,11 @@ export default function SprintPlanningPage() {
                     <td className="px-4 py-3"><Badge role={role} /></td>
                     {data.sprints.map((s) => {
                       const cap = data.capacity.find((c) => c.sprint_id === s.id && c.role === role)
-                      const team = data.team
-                      const pctKey = role === 'ANALYST' ? 'analysis_percentage' : `${role.toLowerCase()}_percentage`
-                      const rolePct = (team as unknown as Record<string, number>)[pctKey] ?? 0
-                      const planned = data.projects.reduce((sum, p) => sum + p.it_mandays * rolePct * p.capacity_split, 0)
                       const net = cap?.net ?? 0
-                      const pct = net > 0 ? (planned / net) * 100 : 0
+                      // planned per sprint = netto × Σ(capacity_split)
+                      const totalSplit = data.projects.reduce((sum, p) => sum + p.capacity_split, 0)
+                      const planned = Math.round(net * totalSplit * 10) / 10
+                      const pct = totalSplit * 100
                       const isBottleneck = data.bottlenecks.some((b) => b.sprint_id === s.id && b.role === role)
 
                       return (

@@ -94,24 +94,23 @@ export async function getSprintPlanning(teamId: string, fromSprintNumber = 1, co
   const sprintIds = sprints.map((s) => s.id)
   const capacity = await getCapacityByTeam(teamId, sprintIds)
 
-  // Calculate planned mandays per role per sprint
+  // Bottleneck: planned per sprint = netto_cap × Σ(capacity_split)
+  // capacity_split = fractie van teamcapaciteit die een project per sprint claimt
+  const totalSplit = team.projects.reduce((sum, p) => sum + p.capacity_split, 0)
+
   const bottlenecks = []
   for (const sprint of sprints) {
     const roles: MemberRole[] = ['DEV', 'TEST', 'ANALYST', 'PO']
     for (const role of roles) {
-      const rolePctKey = role.toLowerCase() === 'analyst' ? 'analysis_percentage' : `${role.toLowerCase()}_percentage`
-      const rolePct = (team as unknown as Record<string, number>)[rolePctKey] ?? 0
-
-      const plannedDays = team.projects.reduce((sum, p) => {
-        return sum + p.it_mandays * rolePct * p.capacity_split
-      }, 0)
-
       const cap = capacity.find((c) => c.sprint_id === sprint.id && c.role === role)
-      if (cap && plannedDays > cap.net) {
+      const netCap = cap?.net ?? 0
+      const plannedDays = Math.round(netCap * totalSplit * 10) / 10
+
+      if (cap && totalSplit > 1.0) {
         bottlenecks.push({
           role,
           sprint_id: sprint.id,
-          planned_days: Math.round(plannedDays * 10) / 10,
+          planned_days: plannedDays,
           net_capacity: cap.net,
           overage: Math.round((plannedDays - cap.net) * 10) / 10,
         })
