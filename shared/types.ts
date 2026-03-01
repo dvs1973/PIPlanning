@@ -29,6 +29,7 @@ export interface Team {
   overhead_percentage: number
   bug_reserve_percentage: number
   sprint_days: number
+  scrum_events_days: number
   created_at: string
   updated_at: string
   members?: TeamMember[]
@@ -137,6 +138,13 @@ export interface CapacityPerRole {
   bruto: number
   leave: number
   net: number
+  // detailed breakdown fields
+  verlof: number
+  opleiding: number
+  ziekte: number
+  scrum_events: number
+  overhead: number
+  bug_reserve: number
 }
 
 export interface CapacityOverviewItem {

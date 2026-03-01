@@ -32,6 +32,7 @@ export async function create(data: {
   overhead_percentage?: number
   bug_reserve_percentage?: number
   sprint_days?: number
+  scrum_events_days?: number
 }) {
   return prisma.team.create({ data })
 }
@@ -46,6 +47,7 @@ export async function update(id: string, data: Partial<{
   overhead_percentage: number
   bug_reserve_percentage: number
   sprint_days: number
+  scrum_events_days: number
 }>) {
   const team = await prisma.team.findUnique({ where: { id } })
   if (!team) throw new Error('Team niet gevonden')

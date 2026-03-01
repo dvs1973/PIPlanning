@@ -6,12 +6,22 @@ export function calculateMemberCapacity(
   sprintDays: number,
   leaveDays: number,
   overheadPct: number,
-  bugReservePct: number
-): number {
+  bugReservePct: number,
+  scrumEventsDays: number = 0
+): { net: number; scrum_events: number; overhead: number; bug_reserve: number } {
   const afterLeave = sprintDays - leaveDays
-  const afterOverhead = afterLeave * (1 - overheadPct / 100)
-  const afterBugReserve = afterOverhead * (1 - bugReservePct / 100)
-  return Math.round(afterBugReserve * 10) / 10
+  const scrumEvents = scrumEventsDays
+  const afterScrum = afterLeave - scrumEvents
+  const overhead = afterScrum * (overheadPct / 100)
+  const afterOverhead = afterScrum - overhead
+  const bugReserve = afterOverhead * (bugReservePct / 100)
+  const net = afterOverhead - bugReserve
+  return {
+    net: Math.round(net * 10) / 10,
+    scrum_events: Math.round(scrumEvents * 10) / 10,
+    overhead: Math.round(overhead * 10) / 10,
+    bug_reserve: Math.round(bugReserve * 10) / 10,
+  }
 }
 
 // 2. Netto capaciteit per rol per sprint voor een team
@@ -31,28 +41,40 @@ export async function getCapacityByTeam(teamId: string, sprintIds?: string[]) {
     },
   })
 
-  // Build leave count map: memberId -> sprintId -> count
-  const leaveMap = new Map<string, Map<string, number>>()
+  // Build leave count map: memberId -> sprintId -> { total, verlof, opleiding, ziekte }
+  type LeaveBreakdown = { total: number; verlof: number; opleiding: number; ziekte: number }
+  const leaveMap = new Map<string, Map<string, LeaveBreakdown>>()
   for (const e of leaveEntries) {
     if (!leaveMap.has(e.member_id)) leaveMap.set(e.member_id, new Map())
     const sprintMap = leaveMap.get(e.member_id)!
-    sprintMap.set(e.sprint_id, (sprintMap.get(e.sprint_id) ?? 0) + 1)
+    const existing = sprintMap.get(e.sprint_id) ?? { total: 0, verlof: 0, opleiding: 0, ziekte: 0 }
+    existing.total += 1
+    if (e.type === 'VERLOF') existing.verlof += 1
+    else if (e.type === 'OPLEIDING') existing.opleiding += 1
+    else if (e.type === 'ZIEKTE') existing.ziekte += 1
+    sprintMap.set(e.sprint_id, existing)
   }
 
   const results = []
   for (const sprint of sprints) {
-    const roleMap = new Map<MemberRole, { bruto: number; leave: number; net: number; count: number }>()
+    const roleMap = new Map<MemberRole, { bruto: number; leave: number; net: number; count: number; verlof: number; opleiding: number; ziekte: number; scrum_events: number; overhead: number; bug_reserve: number }>()
 
     for (const member of members) {
-      const leaveDays = leaveMap.get(member.id)?.get(sprint.id) ?? 0
-      const net = calculateMemberCapacity(team.sprint_days, leaveDays, team.overhead_percentage, team.bug_reserve_percentage)
+      const leaveBreakdown = leaveMap.get(member.id)?.get(sprint.id) ?? { total: 0, verlof: 0, opleiding: 0, ziekte: 0 }
+      const calc = calculateMemberCapacity(team.sprint_days, leaveBreakdown.total, team.overhead_percentage, team.bug_reserve_percentage, team.scrum_events_days)
 
-      const existing = roleMap.get(member.role) ?? { bruto: 0, leave: 0, net: 0, count: 0 }
+      const existing = roleMap.get(member.role) ?? { bruto: 0, leave: 0, net: 0, count: 0, verlof: 0, opleiding: 0, ziekte: 0, scrum_events: 0, overhead: 0, bug_reserve: 0 }
       roleMap.set(member.role, {
         bruto: existing.bruto + team.sprint_days,
-        leave: existing.leave + leaveDays,
-        net: Math.round((existing.net + net) * 10) / 10,
+        leave: existing.leave + leaveBreakdown.total,
+        net: Math.round((existing.net + calc.net) * 10) / 10,
         count: existing.count + 1,
+        verlof: existing.verlof + leaveBreakdown.verlof,
+        opleiding: existing.opleiding + leaveBreakdown.opleiding,
+        ziekte: existing.ziekte + leaveBreakdown.ziekte,
+        scrum_events: Math.round((existing.scrum_events + calc.scrum_events) * 10) / 10,
+        overhead: Math.round((existing.overhead + calc.overhead) * 10) / 10,
+        bug_reserve: Math.round((existing.bug_reserve + calc.bug_reserve) * 10) / 10,
       })
     }
 

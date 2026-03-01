@@ -9,7 +9,7 @@ import Modal from '../components/shared/Modal'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
 import { useToast } from '../components/shared/Toast'
 import { MemberRole, LeaveType, TeamMember } from '../../../shared/types'
-import { format, eachDayOfInterval, isWeekend } from 'date-fns'
+import { format, eachDayOfInterval, isWeekend, getDay } from 'date-fns'
 
 const ROLES: MemberRole[] = ['DEV', 'TEST', 'ANALYST', 'PO']
 const ROLE_LABELS: Record<MemberRole, string> = { DEV: 'Dev', TEST: 'Test', ANALYST: 'Analyse', PO: 'PO' }
@@ -38,21 +38,27 @@ function LeaveGrid({ member, sprintId, sprintStart, sprintEnd }: { member: TeamM
     setPopover(null)
   }
 
+  const DAY_LABELS = ['Zo', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za']
+
   return (
     <div className="flex gap-0.5">
-      {workDays.map((day) => {
+      {workDays.map((day, idx) => {
         const dateStr = format(day, 'yyyy-MM-dd')
         const entry = leave?.find((l) => l.date.startsWith(dateStr))
         const color = entry ? LEAVE_COLORS[entry.type] : 'bg-surface-3 hover:bg-surface-2'
+        // Add visual gap between week 1 and week 2 (after every 5 workdays)
+        const weekGap = idx > 0 && idx % 5 === 0 ? 'ml-2' : ''
         return (
-          <div key={day.getTime()} className="relative">
+          <div key={day.getTime()} className={`relative ${weekGap}`}>
             <button
               onClick={() => handleClick(day)}
               title={format(day, 'dd-MM')}
-              className={`w-4 h-4 rounded-sm transition-colors ${color}`}
-            />
+              className={`w-6 h-6 rounded-sm transition-colors flex items-center justify-center text-[9px] font-medium ${color} ${entry ? 'text-white' : 'text-gray-500'}`}
+            >
+              {DAY_LABELS[getDay(day)]}
+            </button>
             {popover === day.getTime() && (
-              <div className="absolute z-20 top-5 left-0 bg-surface-2 border border-border rounded-lg p-2 space-y-1 shadow-xl">
+              <div className="absolute z-20 top-7 left-0 bg-surface-2 border border-border rounded-lg p-2 space-y-1 shadow-xl">
                 {(['VERLOF', 'OPLEIDING', 'ZIEKTE'] as LeaveType[]).map((type) => (
                   <button key={type} onClick={() => handleLeaveType(day, type)} className={`block w-full text-left px-2 py-1 text-xs rounded hover:opacity-80 text-white ${LEAVE_COLORS[type]}`}>
                     {type.charAt(0) + type.slice(1).toLowerCase()}
@@ -93,10 +99,26 @@ function TeamContent({ teamId }: { teamId: string }) {
     } catch { showToast('Toevoegen mislukt', 'error') }
   }
 
+  // Compute totals for the capacity table
+  const totals = capacity?.reduce(
+    (acc, c) => ({
+      count: acc.count + (c.count ?? 0),
+      bruto: acc.bruto + c.bruto,
+      verlof: acc.verlof + (c.verlof ?? 0),
+      opleiding: acc.opleiding + (c.opleiding ?? 0),
+      ziekte: acc.ziekte + (c.ziekte ?? 0),
+      scrum_events: Math.round((acc.scrum_events + (c.scrum_events ?? 0)) * 10) / 10,
+      overhead: Math.round((acc.overhead + (c.overhead ?? 0)) * 10) / 10,
+      bug_reserve: Math.round((acc.bug_reserve + (c.bug_reserve ?? 0)) * 10) / 10,
+      net: Math.round((acc.net + c.net) * 10) / 10,
+    }),
+    { count: 0, bruto: 0, verlof: 0, opleiding: 0, ziekte: 0, scrum_events: 0, overhead: 0, bug_reserve: 0, net: 0 }
+  )
+
   return (
-    <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Linker kolom: Teamleden + verlof */}
-      <div className="lg:col-span-2">
+    <div className="mt-4 space-y-6">
+      {/* Teamleden + verlof */}
+      <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white">Teamleden</h3>
           <div className="flex items-center gap-3">
@@ -152,35 +174,62 @@ function TeamContent({ teamId }: { teamId: string }) {
         </div>
       </div>
 
-      {/* Rechter kolom: Capaciteitsberekening */}
+      {/* Capaciteitsberekening — full-width onder teamleden */}
       <div>
         <h3 className="text-sm font-semibold text-white mb-3">Capaciteitsberekening</h3>
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="bg-surface border border-border rounded-xl overflow-hidden overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left px-3 py-2.5 text-gray-400">Rol</th>
+                <th className="text-right px-3 py-2.5 text-gray-400">Leden</th>
                 <th className="text-right px-3 py-2.5 text-gray-400">Bruto</th>
-                <th className="text-right px-3 py-2.5 text-gray-400">Verlof</th>
-                <th className="text-right px-3 py-2.5 text-gray-400 font-semibold text-accent">Netto</th>
+                <th className="text-right px-3 py-2.5 text-cap-red">Verlof</th>
+                <th className="text-right px-3 py-2.5 text-purple">Opleiding</th>
+                <th className="text-right px-3 py-2.5 text-gray-400">Ziekte</th>
+                <th className="text-right px-3 py-2.5 text-gray-400">Scrum Events</th>
+                <th className="text-right px-3 py-2.5 text-gray-400">Overhead</th>
+                <th className="text-right px-3 py-2.5 text-gray-400">Bug Reserve</th>
+                <th className="text-right px-3 py-2.5 text-accent font-semibold">Netto</th>
               </tr>
             </thead>
             <tbody>
               {ROLES.map((role) => {
                 const cap = capacity?.find((c) => c.role === role)
+                if (!cap) return null
                 return (
-                  <tr key={role} className="border-b border-border/50 last:border-b-0">
+                  <tr key={role} className="border-b border-border/50">
                     <td className="px-3 py-2.5"><Badge role={role} /></td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap?.bruto ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-cap-red">{cap?.leave ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-accent font-semibold">{cap?.net ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.count ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.bruto}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-cap-red">{cap.verlof ?? 0}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-purple">{cap.opleiding ?? 0}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.ziekte ?? 0}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.scrum_events ?? 0}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.overhead ?? 0}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.bug_reserve ?? 0}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-accent font-semibold">{cap.net}</td>
                   </tr>
                 )
               })}
+              {totals && (
+                <tr className="border-t-2 border-border bg-surface-2/50 font-semibold">
+                  <td className="px-3 py-2.5 text-gray-300">Totaal</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.count}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.bruto}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-cap-red">{totals.verlof}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-purple">{totals.opleiding}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.ziekte}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.scrum_events}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.overhead}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.bug_reserve}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-accent font-semibold">{totals.net}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-500 mt-2">Netto = bruto − verlof − overhead − bug reserve</p>
+        <p className="text-xs text-gray-500 mt-2">Netto = bruto − verlof − opleiding − ziekte − scrum events − overhead − bug reserve</p>
       </div>
 
       {/* Modals */}

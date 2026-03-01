@@ -43,6 +43,7 @@ model Team {
   overhead_percentage    Float        @default(15)
   bug_reserve_percentage Float        @default(20)
   sprint_days            Int          @default(10)
+  scrum_events_days      Float        @default(1.5)
   created_at             DateTime     @default(now())
   updated_at             DateTime     @updatedAt
 
