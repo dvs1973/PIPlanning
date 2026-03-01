@@ -62,14 +62,14 @@ export default function RoadmapPage() {
               <p className="text-sm font-medium text-white">{teamData.team.name}</p>
               <Badge teamType={teamData.team.type} className="mt-1" />
             </div>
-            <div className="flex-1 flex relative overflow-x-auto">
+            <div className="flex-1 flex relative overflow-x-auto" style={{ minHeight: `${Math.max(1, teamData.projects.length) * 32 + 8}px` }}>
               {/* Sprint grid lijnen */}
               {data.sprints.map((s) => (
                 <div key={s.id} className="flex-1 min-w-[80px] border-r border-border/50 last:border-r-0" />
               ))}
-              {/* Project balken (overlay) */}
-              <div className="absolute inset-0 py-2 px-1">
-                {teamData.projects.map((p) => {
+              {/* Project balken (overlay) — elk project op een eigen rij */}
+              <div className="absolute inset-0 py-1 px-1">
+                {teamData.projects.map((p, pIdx) => {
                   const startIdx = data.sprints.findIndex((s) => s.id === p.start_sprint?.id)
                   const endIdx = data.sprints.findIndex((s) => s.id === p.end_sprint?.id)
                   if (startIdx < 0) return null
@@ -83,7 +83,7 @@ export default function RoadmapPage() {
                     <div
                       key={p.project.id}
                       className={`absolute h-7 rounded ${barColor} flex items-center px-2 overflow-hidden`}
-                      style={{ left: `${left}%`, width: `${width}%`, top: '4px' }}
+                      style={{ left: `${left}%`, width: `${width}%`, top: `${pIdx * 32 + 4}px` }}
                       title={`${p.project.name} — ${p.estimated_sprints} sprints`}
                     >
                       <span className="text-xs text-white font-medium truncate">{p.project.name}</span>

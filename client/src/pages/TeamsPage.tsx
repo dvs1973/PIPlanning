@@ -91,15 +91,21 @@ function TeamContent({ teamId }: { teamId: string }) {
   const [deleteMemberTarget, setDeleteMemberTarget] = useState<TeamMember | null>(null)
   const [memberForm, setMemberForm] = useState({ name: '', role: 'DEV' as MemberRole, initials: '' })
 
-  // Inline editing state for scrum_events_days and bug_reserve_percentage
-  const [editingField, setEditingField] = useState<'scrum_events' | 'bug_reserve' | null>(null)
+  // Inline editing state for scrum_events_days, overhead_percentage, bug_reserve_percentage
+  const [editingField, setEditingField] = useState<'scrum_events' | 'overhead' | 'bug_reserve' | null>(null)
   const [editingValue, setEditingValue] = useState('')
+  const [showOverheadTooltip, setShowOverheadTooltip] = useState(false)
 
-  const handleStartInlineEdit = (field: 'scrum_events' | 'bug_reserve') => {
+  const FIELD_LABELS: Record<string, string> = { scrum_events: 'Scrum events (dagen/persoon)', overhead: 'Overhead (%)', bug_reserve: 'Bug reserve (%)' }
+  const FIELD_TOAST: Record<string, string> = { scrum_events: 'Scrum events bijgewerkt', overhead: 'Overhead bijgewerkt', bug_reserve: 'Bug reserve bijgewerkt' }
+
+  const handleStartInlineEdit = (field: 'scrum_events' | 'overhead' | 'bug_reserve') => {
     setEditingField(field)
     setEditingValue(
       field === 'scrum_events'
         ? String(team?.scrum_events_days ?? 1.5)
+        : field === 'overhead'
+        ? String(team?.overhead_percentage ?? 15)
         : String(team?.bug_reserve_percentage ?? 20)
     )
   }
@@ -111,9 +117,11 @@ function TeamContent({ teamId }: { teamId: string }) {
     try {
       const data = editingField === 'scrum_events'
         ? { scrum_events_days: val }
+        : editingField === 'overhead'
+        ? { overhead_percentage: val }
         : { bug_reserve_percentage: val }
       await updateTeam.mutateAsync({ id: teamId, ...data })
-      showToast(editingField === 'scrum_events' ? 'Scrum events bijgewerkt' : 'Bug reserve bijgewerkt')
+      showToast(FIELD_TOAST[editingField])
     } catch { showToast('Opslaan mislukt', 'error') }
     setEditingField(null)
   }
@@ -229,16 +237,24 @@ function TeamContent({ teamId }: { teamId: string }) {
                     ({team?.scrum_events_days ?? 1.5}d/pers)
                   </span>
                 </th>
-                <th className="text-center px-3 py-2.5 text-gray-400 relative group">
+                <th className="text-center px-3 py-2.5 text-gray-400 relative">
                   <span className="inline-flex items-center gap-1">
                     Overhead
-                    <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-gray-500 text-[9px] text-gray-500 cursor-help leading-none">i</span>
+                    <span
+                      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-gray-500 text-[9px] text-gray-500 cursor-help leading-none"
+                      onMouseEnter={() => setShowOverheadTooltip(true)}
+                      onMouseLeave={() => setShowOverheadTooltip(false)}
+                    >i</span>
                   </span>
-                  <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-surface-2 border border-border rounded-lg shadow-xl text-left text-[11px] text-gray-300 font-normal hidden group-hover:block">
-                    Tijd besteed aan niet-project-gebonden werk: vergaderingen, administratie, support, code reviews, kennisdeling en ad-hoc taken.
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-surface-2 border-r border-b border-border rotate-45 -mt-1" />
-                  </div>
-                  <span className="block text-[10px] text-gray-500 font-normal">({team?.overhead_percentage ?? 15}%)</span>
+                  {showOverheadTooltip && (
+                    <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-surface-2 border border-border rounded-lg shadow-xl text-left text-[11px] text-gray-300 font-normal">
+                      Tijd besteed aan niet-project-gebonden werk: vergaderingen, administratie, support, code reviews, kennisdeling en ad-hoc taken.
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-surface-2 border-r border-b border-border rotate-45 -mt-1" />
+                    </div>
+                  )}
+                  <span className="block text-[10px] text-gray-500 font-normal cursor-pointer hover:text-accent" onClick={() => handleStartInlineEdit('overhead')}>
+                    ({team?.overhead_percentage ?? 15}%)
+                  </span>
                 </th>
                 <th className="text-center px-3 py-2.5 text-gray-400">
                   Bug Reserve
@@ -256,7 +272,7 @@ function TeamContent({ teamId }: { teamId: string }) {
                   <td colSpan={10} className="px-3 py-2">
                     <div className="flex items-center gap-2 justify-center">
                       <span className="text-gray-300 text-xs">
-                        {editingField === 'scrum_events' ? 'Scrum events (dagen/persoon):' : 'Bug reserve (%):'}
+                        {FIELD_LABELS[editingField]}:
                       </span>
                       <input
                         autoFocus
