@@ -22,7 +22,10 @@ export function useUpdateTeam() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, ...data }: Partial<Team> & { id: string }) => api.put(`/teams/${id}`, data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['teams'] })
+      qc.invalidateQueries({ queryKey: ['capacity'] })
+    },
   })
 }
 

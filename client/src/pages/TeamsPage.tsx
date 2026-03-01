@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useTeams, useUpdateTeam } from '../hooks/useTeams'
+import { useTeams, useTeam, useUpdateTeam } from '../hooks/useTeams'
 import { useMembers, useCreateMember, useDeleteMember, useLeave, useCreateLeave, useDeleteLeave } from '../hooks/useMembers'
 import { useCapacityByTeam } from '../hooks/useCapacity'
 import { useSprints } from '../hooks/useSprints'
@@ -75,11 +75,13 @@ function LeaveGrid({ member, sprintId, sprintStart, sprintEnd }: { member: TeamM
 }
 
 function TeamContent({ teamId }: { teamId: string }) {
+  const { data: team } = useTeam(teamId)
   const { data: members } = useMembers(teamId)
   const { data: sprints } = useSprints()
   const [selectedSprint, setSelectedSprint] = useState(0)
   const sprint = sprints?.[selectedSprint]
   const { data: capacity } = useCapacityByTeam(teamId, sprint ? [sprint.id] : [])
+  const updateTeam = useUpdateTeam()
 
   const createMember = useCreateMember(teamId)
   const deleteMember = useDeleteMember(teamId)
@@ -88,6 +90,38 @@ function TeamContent({ teamId }: { teamId: string }) {
   const [memberModal, setMemberModal] = useState(false)
   const [deleteMemberTarget, setDeleteMemberTarget] = useState<TeamMember | null>(null)
   const [memberForm, setMemberForm] = useState({ name: '', role: 'DEV' as MemberRole, initials: '' })
+
+  // Inline editing state for scrum_events_days and bug_reserve_percentage
+  const [editingField, setEditingField] = useState<'scrum_events' | 'bug_reserve' | null>(null)
+  const [editingValue, setEditingValue] = useState('')
+
+  const handleStartInlineEdit = (field: 'scrum_events' | 'bug_reserve') => {
+    setEditingField(field)
+    setEditingValue(
+      field === 'scrum_events'
+        ? String(team?.scrum_events_days ?? 1.5)
+        : String(team?.bug_reserve_percentage ?? 20)
+    )
+  }
+
+  const handleSaveInlineEdit = async () => {
+    if (!editingField) return
+    const val = parseFloat(editingValue)
+    if (isNaN(val) || val < 0) { setEditingField(null); return }
+    try {
+      const data = editingField === 'scrum_events'
+        ? { scrum_events_days: val }
+        : { bug_reserve_percentage: val }
+      await updateTeam.mutateAsync({ id: teamId, ...data })
+      showToast(editingField === 'scrum_events' ? 'Scrum events bijgewerkt' : 'Bug reserve bijgewerkt')
+    } catch { showToast('Opslaan mislukt', 'error') }
+    setEditingField(null)
+  }
+
+  const handleInlineKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSaveInlineEdit()
+    if (e.key === 'Escape') setEditingField(null)
+  }
 
   const handleCreateMember = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -145,19 +179,21 @@ function TeamContent({ teamId }: { teamId: string }) {
                   <Badge role={role} />
                 </div>
                 {roleMembers.map((m) => (
-                  <div key={m.id} className="flex items-center justify-between px-4 py-3 border-b border-border/50 last:border-b-0 hover:bg-surface-2/30">
-                    <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-medium">{m.initials}</div>
-                      <span className="text-sm text-white">{m.name}</span>
+                  <div key={m.id} className="grid grid-cols-[1fr_auto_auto] items-center px-4 py-3 border-b border-border/50 last:border-b-0 hover:bg-surface-2/30">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-medium shrink-0">{m.initials}</div>
+                      <span className="text-sm text-white truncate">{m.name}</span>
                     </div>
-                    {sprint && (
-                      <LeaveGrid
-                        member={m}
-                        sprintId={sprint.id}
-                        sprintStart={sprint.start_date}
-                        sprintEnd={sprint.end_date}
-                      />
-                    )}
+                    <div className="flex justify-end">
+                      {sprint && (
+                        <LeaveGrid
+                          member={m}
+                          sprintId={sprint.id}
+                          sprintStart={sprint.start_date}
+                          sprintEnd={sprint.end_date}
+                        />
+                      )}
+                    </div>
                     <button onClick={() => setDeleteMemberTarget(m)} className="text-xs text-gray-500 hover:text-cap-red ml-3 transition-colors">✕</button>
                   </div>
                 ))}
@@ -181,49 +217,87 @@ function TeamContent({ teamId }: { teamId: string }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left px-3 py-2.5 text-gray-400">Rol</th>
-                <th className="text-right px-3 py-2.5 text-gray-400">Leden</th>
-                <th className="text-right px-3 py-2.5 text-gray-400">Bruto</th>
-                <th className="text-right px-3 py-2.5 text-cap-red">Verlof</th>
-                <th className="text-right px-3 py-2.5 text-purple">Opleiding</th>
-                <th className="text-right px-3 py-2.5 text-gray-400">Ziekte</th>
-                <th className="text-right px-3 py-2.5 text-gray-400">Scrum Events</th>
-                <th className="text-right px-3 py-2.5 text-gray-400">Overhead</th>
-                <th className="text-right px-3 py-2.5 text-gray-400">Bug Reserve</th>
-                <th className="text-right px-3 py-2.5 text-accent font-semibold">Netto</th>
+                <th className="text-center px-3 py-2.5 text-gray-400">Rol</th>
+                <th className="text-center px-3 py-2.5 text-gray-400">Leden</th>
+                <th className="text-center px-3 py-2.5 text-gray-400">Bruto</th>
+                <th className="text-center px-3 py-2.5 text-cap-red">Verlof</th>
+                <th className="text-center px-3 py-2.5 text-purple">Opleiding</th>
+                <th className="text-center px-3 py-2.5 text-gray-400">Ziekte</th>
+                <th className="text-center px-3 py-2.5 text-gray-400">
+                  Scrum Events
+                  <span className="block text-[10px] text-gray-500 font-normal cursor-pointer hover:text-accent" onClick={() => handleStartInlineEdit('scrum_events')}>
+                    ({team?.scrum_events_days ?? 1.5}d/pers)
+                  </span>
+                </th>
+                <th className="text-center px-3 py-2.5 text-gray-400">
+                  Overhead
+                  <span className="block text-[10px] text-gray-500 font-normal">({team?.overhead_percentage ?? 15}%)</span>
+                </th>
+                <th className="text-center px-3 py-2.5 text-gray-400">
+                  Bug Reserve
+                  <span className="block text-[10px] text-gray-500 font-normal cursor-pointer hover:text-accent" onClick={() => handleStartInlineEdit('bug_reserve')}>
+                    ({team?.bug_reserve_percentage ?? 20}%)
+                  </span>
+                </th>
+                <th className="text-center px-3 py-2.5 text-accent font-semibold">Netto</th>
               </tr>
             </thead>
             <tbody>
+              {/* Inline edit row */}
+              {editingField && (
+                <tr className="border-b border-accent/30 bg-accent/5">
+                  <td colSpan={10} className="px-3 py-2">
+                    <div className="flex items-center gap-2 justify-center">
+                      <span className="text-gray-300 text-xs">
+                        {editingField === 'scrum_events' ? 'Scrum events (dagen/persoon):' : 'Bug reserve (%):'}
+                      </span>
+                      <input
+                        autoFocus
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onBlur={handleSaveInlineEdit}
+                        onKeyDown={handleInlineKeyDown}
+                        className="w-20 px-2 py-1 text-xs bg-surface-2 border border-border rounded text-white text-center font-mono"
+                      />
+                      <button onClick={handleSaveInlineEdit} className="text-xs px-2 py-1 bg-accent hover:bg-accent-light text-white rounded">Opslaan</button>
+                      <button onClick={() => setEditingField(null)} className="text-xs px-2 py-1 text-gray-400 hover:text-white">Annuleren</button>
+                    </div>
+                  </td>
+                </tr>
+              )}
               {ROLES.map((role) => {
                 const cap = capacity?.find((c) => c.role === role)
                 if (!cap) return null
                 return (
                   <tr key={role} className="border-b border-border/50">
-                    <td className="px-3 py-2.5"><Badge role={role} /></td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.count ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.bruto}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-cap-red">{cap.verlof ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-purple">{cap.opleiding ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.ziekte ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.scrum_events ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.overhead ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-300">{cap.bug_reserve ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-accent font-semibold">{cap.net}</td>
+                    <td className="px-3 py-2.5 text-center"><Badge role={role} /></td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-300">{cap.count ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-300">{cap.bruto}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-cap-red">{cap.verlof ?? 0}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-purple">{cap.opleiding ?? 0}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-300">{cap.ziekte ?? 0}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-300">{cap.scrum_events ?? 0}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-300">{cap.overhead ?? 0}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-300">{cap.bug_reserve ?? 0}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-accent font-semibold">{cap.net}</td>
                   </tr>
                 )
               })}
               {totals && (
                 <tr className="border-t-2 border-border bg-surface-2/50 font-semibold">
-                  <td className="px-3 py-2.5 text-gray-300">Totaal</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.count}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.bruto}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-cap-red">{totals.verlof}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-purple">{totals.opleiding}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.ziekte}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.scrum_events}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.overhead}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">{totals.bug_reserve}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-accent font-semibold">{totals.net}</td>
+                  <td className="px-3 py-2.5 text-center text-gray-300">Totaal</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-gray-300">{totals.count}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-gray-300">{totals.bruto}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-cap-red">{totals.verlof}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-purple">{totals.opleiding}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-gray-300">{totals.ziekte}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-gray-300">{totals.scrum_events}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-gray-300">{totals.overhead}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-gray-300">{totals.bug_reserve}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-accent font-semibold">{totals.net}</td>
                 </tr>
               )}
             </tbody>
