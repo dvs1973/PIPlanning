@@ -252,19 +252,20 @@ export default function TeamsPage() {
 
   return (
     <div>
-      <PageHeader title="Teamconfiguratie" subtitle="Leden, verlof en capaciteitsberekening per team" />
-      {teams && (
-        <div className="flex items-center justify-between">
-          <TabBar tabs={tabs} activeTab={teamId} onChange={setActiveTeam} />
+      <PageHeader
+        title="Teamconfiguratie"
+        subtitle="Leden, verlof en capaciteitsberekening per team"
+        actions={
           <button
             onClick={handleOpenEdit}
             disabled={!teamId}
-            className="text-xs px-3 py-1.5 border border-border rounded-lg text-gray-400 hover:text-white hover:border-accent transition-colors disabled:opacity-30"
+            className="text-xs px-3 py-1.5 bg-accent hover:bg-accent-light text-white rounded-lg transition-colors disabled:opacity-30"
           >
-            ✎ Naam
+            ✎ Team bewerken
           </button>
-        </div>
-      )}
+        }
+      />
+      {teams && <TabBar tabs={tabs} activeTab={teamId} onChange={setActiveTeam} />}
       {teamId && <TeamContent teamId={teamId} />}
 
       {editModal && (
